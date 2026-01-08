@@ -27,7 +27,7 @@ public final class HttpResponse {
         final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         final int responseCode = connection.getResponseCode();
         final byte[] buffer = new byte[4096];
-        try (InputStream input = (responseCode >= 200 && responseCode < 300 ? connection.getInputStream() : connection.getErrorStream())) {
+        try (InputStream input = (responseCode >= 200 && responseCode < 400 ? connection.getInputStream() : connection.getErrorStream())) {
             int read;
             while ((read = input.read(buffer)) != -1)
                 bytes.write(buffer, 0, read);

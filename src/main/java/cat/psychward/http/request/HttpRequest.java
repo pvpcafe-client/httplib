@@ -13,20 +13,24 @@ public final class HttpRequest implements AutoCloseable {
     private static final List<String> BODY_METHODS = Arrays.asList("POST", "PUT", "PATCH");
 
     private final HttpURLConnection connection;
+    private final boolean followRedirects;
     private final String method;
     private byte[] content;
 
-    public HttpRequest(URL url, Proxy proxy, String method) throws IOException {
+    public HttpRequest(URL url, Proxy proxy, String method, boolean followRedirects) throws IOException {
         if (url.getProtocol().equals("http") || url.getProtocol().equals("https")) {
             this.connection = (HttpURLConnection) url.openConnection(proxy);
         } else {
             throw new IllegalArgumentException("Unsupported protocol: " + url.getProtocol());
         }
 
+        this.followRedirects = followRedirects;
         this.method = method;
     }
 
     public HttpResponse execute() throws IOException {
+        this.connection.setInstanceFollowRedirects(this.followRedirects);
+
         if (RESPONSE_METHODS.contains(this.method))
             this.connection.setDoInput(true);
 
@@ -49,7 +53,7 @@ public final class HttpRequest implements AutoCloseable {
     }
 
     @Override
-    public void close() throws Exception {
+    public void close() {
         if (this.connection != null)
             this.connection.disconnect();
     }
@@ -77,6 +81,7 @@ public final class HttpRequest implements AutoCloseable {
 
         private final List<Map.Entry<String, String>> multiHeaders = new ArrayList<>();
         private final Map<String, String> headers = new HashMap<>();
+        private boolean followRedirects = true;
         private Proxy proxy = Proxy.NO_PROXY;
         private byte[] content;
         private String method;
@@ -126,6 +131,11 @@ public final class HttpRequest implements AutoCloseable {
             return this;
         }
 
+        public Builder followRedirects(boolean followRedirects) {
+            this.followRedirects = followRedirects;
+            return this;
+        }
+
         private void checkMethod(String method) {
             if (method == null || !ALLOWED_METHODS.contains(method.toUpperCase()))
                 throw new IllegalArgumentException("Unsupported HTTP method: " + method);
@@ -134,7 +144,7 @@ public final class HttpRequest implements AutoCloseable {
         public HttpRequest build() throws IOException {
             this.checkMethod(this.method);
 
-            final HttpRequest request = new HttpRequest(this.url, this.proxy, this.method);
+            final HttpRequest request = new HttpRequest(this.url, this.proxy, this.method, this.followRedirects);
             this.multiHeaders.forEach(entry -> request.addHeader(entry.getKey(), entry.getValue()));
             this.headers.forEach(request::setHeader);
             request.content = content;

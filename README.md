@@ -9,14 +9,15 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.pvpcafe-client:httplib:1.0.1")
+    implementation("com.github.pvpcafe-client:httplib:1.0.2")
 }
 ```
 
 ### using the library
 ```java
 try (final HttpRequest request = HttpRequest.builder()
-        .url("https://this-is.an-api.xyz")
+        .url("https://this-is.an-api.xyz/?example-query=$0")
+        .query("0", "this is an example query!")
         .setHeader("Authorization", "Bearer " + bearerToken)
         .setHeader("Accept", "application/json")
         .method("GET")

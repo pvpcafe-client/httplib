@@ -4,7 +4,9 @@ import cat.psychward.http.response.HttpResponse;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class HttpRequest implements AutoCloseable {
@@ -79,8 +81,8 @@ public final class HttpRequest implements AutoCloseable {
                 "GET", "POST", "PUT", "DELETE", "HEAD", "PATCH", "OPTIONS", "TRACE", "CONNECT"
         );
 
+        private final Map<String, String> headers = new HashMap<>(), query = new HashMap<>();
         private final List<Map.Entry<String, String>> multiHeaders = new ArrayList<>();
-        private final Map<String, String> headers = new HashMap<>();
         private boolean followRedirects = true;
         private Proxy proxy = Proxy.NO_PROXY;
         private byte[] content;
@@ -136,6 +138,15 @@ public final class HttpRequest implements AutoCloseable {
             return this;
         }
 
+        public Builder query(String key, Object value) {
+            try {
+                this.query.put(key, URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8.name()));
+            } catch (UnsupportedEncodingException e) {
+                throw new RuntimeException(e);
+            }
+            return this;
+        }
+
         private void checkMethod(String method) {
             if (method == null || !ALLOWED_METHODS.contains(method.toUpperCase()))
                 throw new IllegalArgumentException("Unsupported HTTP method: " + method);
@@ -144,11 +155,39 @@ public final class HttpRequest implements AutoCloseable {
         public HttpRequest build() throws IOException {
             this.checkMethod(this.method);
 
+            try {
+                this.url(this.replaceQuery());
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+
             final HttpRequest request = new HttpRequest(this.url, this.proxy, this.method, this.followRedirects);
             this.multiHeaders.forEach(entry -> request.addHeader(entry.getKey(), entry.getValue()));
             this.headers.forEach(request::setHeader);
             request.content = content;
             return request;
+        }
+
+        private URL replaceQuery() throws MalformedURLException, URISyntaxException {
+            URI oldUri = url.toURI();
+
+            String query = oldUri.getQuery();
+            if (query != null) {
+                for (Map.Entry<String, String> entry : this.query.entrySet())
+                    query = query.replaceAll("\\$" + entry.getKey(), entry.getValue());
+            }
+
+            URI newUri = new URI(
+                    oldUri.getScheme(),
+                    oldUri.getUserInfo(),
+                    oldUri.getHost(),
+                    oldUri.getPort(),
+                    oldUri.getPath(),
+                    query,
+                    oldUri.getFragment()
+            );
+
+            return newUri.toURL();
         }
     }
 

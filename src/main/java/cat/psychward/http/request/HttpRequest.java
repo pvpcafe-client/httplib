@@ -194,7 +194,8 @@ public final class HttpRequest implements AutoCloseable {
                 for (Map.Entry<String, String> entry : this.query.entrySet())
                     query = query.replaceAll("\\$" + entry.getKey(), entry.getValue());
             } else {
-                query = this.query.entrySet().stream().map(entry -> entry.getKey() + '=' + entry.getValue()).collect(Collectors.joining("&"));
+                if (!this.query.isEmpty())
+                    query = this.query.entrySet().stream().map(entry -> entry.getKey() + '=' + entry.getValue()).collect(Collectors.joining("&"));
             }
 
             URI newUri = new URI(

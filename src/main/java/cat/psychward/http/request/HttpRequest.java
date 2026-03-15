@@ -8,18 +8,20 @@ import java.io.UnsupportedEncodingException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public final class HttpRequest implements AutoCloseable {
 
     private static final List<String> RESPONSE_METHODS = Arrays.asList("GET", "HEAD", "OPTIONS", "DELETE");
     private static final List<String> BODY_METHODS = Arrays.asList("POST", "PUT", "PATCH");
 
+    private final int readTimeout, connectTimeout;
     private final HttpURLConnection connection;
     private final boolean followRedirects;
     private final String method;
     private byte[] content;
 
-    public HttpRequest(URL url, Proxy proxy, String method, boolean followRedirects) throws IOException {
+    public HttpRequest(URL url, Proxy proxy, String method, boolean followRedirects, int readTimeout, int connectTimeout) throws IOException {
         if (url.getProtocol().equals("http") || url.getProtocol().equals("https")) {
             this.connection = (HttpURLConnection) url.openConnection(proxy);
         } else {
@@ -27,6 +29,8 @@ public final class HttpRequest implements AutoCloseable {
         }
 
         this.followRedirects = followRedirects;
+        this.connectTimeout = connectTimeout;
+        this.readTimeout = readTimeout;
         this.method = method;
     }
 
@@ -40,6 +44,9 @@ public final class HttpRequest implements AutoCloseable {
             this.connection.setDoInput(true);
             this.connection.setDoOutput(true);
         }
+
+        this.connection.setConnectTimeout(this.connectTimeout);
+        this.connection.setReadTimeout(this.readTimeout);
 
         this.connection.setRequestMethod(this.method);
         this.connection.connect();
@@ -84,6 +91,7 @@ public final class HttpRequest implements AutoCloseable {
         private final Map<String, String> headers = new HashMap<>(), query = new HashMap<>();
         private final List<Map.Entry<String, String>> multiHeaders = new ArrayList<>();
         private boolean followRedirects = true;
+        private int readTimeout, connectTimeout;
         private Proxy proxy = Proxy.NO_PROXY;
         private byte[] content;
         private String method;
@@ -140,7 +148,7 @@ public final class HttpRequest implements AutoCloseable {
 
         public Builder query(String key, Object value) {
             try {
-                this.query.put(key, URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8.name()));
+                this.query.put(URLEncoder.encode(key, StandardCharsets.UTF_8.name()), URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8.name()));
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
@@ -152,6 +160,16 @@ public final class HttpRequest implements AutoCloseable {
                 throw new IllegalArgumentException("Unsupported HTTP method: " + method);
         }
 
+        public Builder readTimeout(int readTimeout) {
+            this.readTimeout = readTimeout;
+            return this;
+        }
+
+        public Builder connectTimeout(int connectTimeout) {
+            this.connectTimeout = connectTimeout;
+            return this;
+        }
+
         public HttpRequest build() throws IOException {
             this.checkMethod(this.method);
 
@@ -161,7 +179,7 @@ public final class HttpRequest implements AutoCloseable {
                 throw new IOException(e);
             }
 
-            final HttpRequest request = new HttpRequest(this.url, this.proxy, this.method, this.followRedirects);
+            final HttpRequest request = new HttpRequest(this.url, this.proxy, this.method, this.followRedirects, this.readTimeout, this.connectTimeout);
             this.multiHeaders.forEach(entry -> request.addHeader(entry.getKey(), entry.getValue()));
             this.headers.forEach(request::setHeader);
             request.content = content;
@@ -175,6 +193,8 @@ public final class HttpRequest implements AutoCloseable {
             if (query != null) {
                 for (Map.Entry<String, String> entry : this.query.entrySet())
                     query = query.replaceAll("\\$" + entry.getKey(), entry.getValue());
+            } else {
+                query = this.query.entrySet().stream().map(entry -> entry.getKey() + '=' + entry.getValue()).collect(Collectors.joining("&"));
             }
 
             URI newUri = new URI(
